@@ -1,341 +1,219 @@
-<!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Rubik - Grid Based (Stable)</title>
-    <script src="https://aframe.io/releases/1.7.0/aframe.min.js"></script>
-
-    <style>
-      #rubiks-menu {
-        position: absolute;
-        top: 18px;
-        right: 18px;
-        z-index: 10;
-        background: rgba(255, 255, 255, 0.92);
-        padding: 12px 14px;
-        border-radius: 10px;
-        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-        box-shadow: 0 8px 18px rgba(0, 0, 0, 0.12);
-        user-select: none;
-      }
-      #rubiks-menu .grid {
-        display: grid;
-        grid-template-columns: repeat(4, auto);
-        gap: 8px;
-        margin-top: 8px;
-      }
-      #rubiks-menu button {
-        padding: 8px 10px;
-        border-radius: 10px;
-        border: none;
-        background: #2196f3;
-        color: #fff;
-        cursor: pointer;
-        font-weight: 700;
-      }
-      #rubiks-menu button:hover {
-        background: #1976d2;
-      }
-      #rubiks-menu button.secondary {
-        background: #455a64;
-      }
-      #rubiks-menu button.secondary:hover {
-        background: #37474f;
-      }
-      #rubiks-menu small {
-        color: #333;
-        display: block;
-        margin-top: 10px;
-        line-height: 1.25;
-      }
-    </style>
-  </head>
-
-  <body>
-    <div id="rubiks-menu">
-      <b>Έλεγχος Κύβου</b>
-      <div class="grid">
-        <button onclick="move('U')">U</button>
-        <button onclick="move('Uprime')">U'</button>
-        <button onclick="move('D')">D</button>
-        <button onclick="move('Dprime')">D'</button>
-
-        <button onclick="move('L')">L</button>
-        <button onclick="move('Lprime')">L'</button>
-        <button onclick="move('R')">R</button>
-        <button onclick="move('Rprime')">R'</button>
-
-        <button onclick="move('F')">F</button>
-        <button onclick="move('Fprime')">F'</button>
-        <button onclick="move('B')">B</button>
-        <button onclick="move('Bprime')">B'</button>
-      </div>
-
-      <div style="margin-top: 10px; display: flex; gap: 10px">
-        <button class="secondary" onclick="scramble(20)">Scramble</button>
-        <button class="secondary" onclick="resetCube()">Reset</button>
-      </div>
-
-      <small>
-        Keyboard: U D L R F B<br />
-        Shift = αντίστροφη (π.χ. Shift+U → U')
-      </small>
-    </div>
-
-    <a-scene stats>
-      <a-assets>
-        <img
-          id="skyTexture"
-          src="https://kostasgian21.github.io/computer_graphics/360-degree_Panorama_of_the_Southern_Sky.jpg"
-          crossorigin="anonymous"
-        />
-      </a-assets>
-
-      <a-sky src="#skyTexture"></a-sky>
-
-      <!-- Φωτισμός -->
-      <a-entity light="type: ambient; intensity: 1.15; color: #FFF"></a-entity>
-      <a-entity light="type: directional; intensity: 1.9; color: #FFF" position="2 5 2"></a-entity>
-
-      <!-- ΟΝΟΜΑ: βάλε το δικό σου -->
-      <a-entity
-        text="value: ΤΟ ΟΝΟΜΑ ΣΑΣ; align: center; width: 8; color: #FF5722"
-        position="0 3.6 -5"
-      ></a-entity>
-
-      <!-- Πάτωμα (μικρότερο για να μην «τρώει» όλη τη σκηνή) -->
-      <a-plane rotation="-90 0 0" position="0 0 -3" width="12" height="12" color="#111"></a-plane>
-
-      <!-- Rubik -->
-      <a-entity id="cube-cluster"></a-entity>
-
-      <!-- Προαιρετικά διακοσμητικά (μπορείς να τα σβήσεις) -->
-      <a-entity id="decorations"></a-entity>
-
-      <!-- Κάμερα -->
-      <a-entity camera look-controls wasd-controls="fly: true" position="0 1.7 1.9"></a-entity>
-    </a-scene>
-
-    <script>
-      // ===== ΡΥΘΜΙΣΕΙΣ =====
-      const cluster = document.getElementById("cube-cluster");
-      const deco = document.getElementById("decorations");
-
-      // Πλέγμα 3x3x3 σε λογικές συντεταγμένες -1,0,1
-      const coords = [-1, 0, 1];
-
-      // Μετατροπή grid->world
-      const SPACING = 0.72;
-      const Y_OFFSET = 1.1; // σήκωσε/κατέβασε τον κύβο από εδώ
-      const Z_OFFSET = -3;
-
-      // Animation (μικρό για να φαίνεται η κίνηση)
-      const ANIM_MS = 220;
-
-      let busy = false;
-      const queue = [];
-
-      const cubelets = [];
-      const initial = [];
-
-      function gridToWorld(x, y, z) {
-        return {
-          x: x * SPACING,
-          y: y * SPACING + Y_OFFSET,
-          z: z * SPACING + Z_OFFSET,
-        };
-      }
-
-      function applyWorldPosition(c) {
-        const x = +c.dataset.x;
-        const y = +c.dataset.y;
-        const z = +c.dataset.z;
-        const w = gridToWorld(x, y, z);
-        c.setAttribute("position", `${w.x} ${w.y} ${w.z}`);
-      }
-
-      // ===== ΔΗΜΙΟΥΡΓΙΑ 27 CUBELETS (a-box για 100% σταθερότητα) =====
-      for (const y of coords) {
-        for (const x of coords) {
-          for (const z of coords) {
-            const c = document.createElement("a-box");
-
-            // εμφάνιση
-            c.setAttribute("width", "0.55");
-            c.setAttribute("height", "0.55");
-            c.setAttribute("depth", "0.55");
-            c.setAttribute("color", "#1b1b1b");
-            c.setAttribute("metalness", "0.08");
-            c.setAttribute("roughness", "0.85");
-
-            // λογικές συντεταγμένες
-            c.dataset.x = x;
-            c.dataset.y = y;
-            c.dataset.z = z;
-
-            applyWorldPosition(c);
-
-            cluster.appendChild(c);
-            cubelets.push(c);
-            initial.push({ x, y, z });
-          }
-        }
-      }
-
-      // ===== (ΠΡΟΑΙΡΕΤΙΚΑ) Διακοσμητικά γύρω από τον κύβο =====
-      const N = 12; // βάλε 0 αν δεν θες τίποτα
-      for (let i = 0; i < N; i++) {
-        const el = document.createElement(i % 2 ? "a-sphere" : "a-box");
-        el.setAttribute("color", i % 2 ? "#4CAF50" : "#FFEB3B");
-        el.setAttribute("scale", "0.35 0.35 0.35");
-
-        let px, pz;
-        do {
-          px = (Math.random() - 0.5) * 14;
-          pz = (Math.random() - 0.5) * 14 - 3;
-        } while (Math.abs(px) < 2 && Math.abs(pz + 3) < 2);
-
-        const py = 0.3 + Math.random() * 2.2;
-        el.setAttribute("position", `${px} ${py} ${pz}`);
-        deco.appendChild(el);
-      }
-
-      // ===== ΟΡΙΣΜΟΣ ΚΙΝΗΣΕΩΝ (grid-based, χωρίς drift) =====
-      const defs = {
-        U:      { axis: "y", layer: +1, dir: +1 },
-        Uprime: { axis: "y", layer: +1, dir: -1 },
-        D:      { axis: "y", layer: -1, dir: -1 },
-        Dprime: { axis: "y", layer: -1, dir: +1 },
-
-        L:      { axis: "x", layer: -1, dir: -1 },
-        Lprime: { axis: "x", layer: -1, dir: +1 },
-        R:      { axis: "x", layer: +1, dir: +1 },
-        Rprime: { axis: "x", layer: +1, dir: -1 },
-
-        F:      { axis: "z", layer: -1, dir: +1 },
-        Fprime: { axis: "z", layer: -1, dir: -1 },
-        B:      { axis: "z", layer: +1, dir: -1 },
-        Bprime: { axis: "z", layer: +1, dir: +1 },
-      };
-
-      function inLayer(c, axis, layer) {
-        if (axis === "x") return +c.dataset.x === layer;
-        if (axis === "y") return +c.dataset.y === layer;
-        return +c.dataset.z === layer;
-      }
-
-      // Καθαρό mapping 90° πάνω στο grid
-      function rotateGrid(x, y, z, axis, dir) {
-        if (axis === "y") return { x: -dir * z, y, z: dir * x };
-        if (axis === "x") return { x, y: -dir * z, z: dir * y };
-        return { x: -dir * y, y: dir * x, z };
-      }
-
-      function doMove(face) {
-        const def = defs[face];
-        if (!def) return;
-
-        const affected = cubelets.filter((c) => inLayer(c, def.axis, def.layer));
-        if (!affected.length) return;
-
-        // pivot στο κέντρο της φέτας (σε world coords)
-        const pivot = document.createElement("a-entity");
-        let cx = 0, cy = 0, cz = 0;
-        if (def.axis === "x") cx = def.layer;
-        if (def.axis === "y") cy = def.layer;
-        if (def.axis === "z") cz = def.layer;
-
-        const w = gridToWorld(cx, cy, cz);
-        pivot.setAttribute("position", `${w.x} ${w.y} ${w.z}`);
-        pivot.setAttribute("rotation", "0 0 0");
-        cluster.appendChild(pivot);
-
-        // attach στο pivot για να γυρίσουν οπτικά
-        const pivotObj = pivot.object3D;
-        affected.forEach((c) => pivotObj.attach(c.object3D));
-
-        const rot = { x: 0, y: 0, z: 0 };
-        rot[def.axis] = 90 * def.dir;
-
-        pivot.setAttribute("animation__rot", {
-          property: "rotation",
-          to: `${rot.x} ${rot.y} ${rot.z}`,
-          dur: ANIM_MS,
-          easing: "easeInOutQuad",
-        });
-
-        pivot.addEventListener(
-          "animationcomplete__rot",
-          () => {
-            // detach πίσω στο cluster
-            const clObj = cluster.object3D;
-            affected.forEach((c) => clObj.attach(c.object3D));
-
-            // ✅ ενημέρωση ΜΟΝΟ με grid math (όχι object3D.position)
-            affected.forEach((c) => {
-              const x = +c.dataset.x;
-              const y = +c.dataset.y;
-              const z = +c.dataset.z;
-              const r = rotateGrid(x, y, z, def.axis, def.dir);
-              c.dataset.x = r.x;
-              c.dataset.y = r.y;
-              c.dataset.z = r.z;
-            });
-
-            // snap πίσω στο grid
-            affected.forEach(applyWorldPosition);
-
-            pivot.remove();
-
-            busy = false;
-            if (queue.length) doMove(queue.shift());
-          },
-          { once: true }
-        );
-      }
-
-      // ===== Public functions για κουμπιά =====
-      window.move = function (face) {
-        if (busy) {
-          queue.push(face);
-          return;
-        }
-        busy = true;
-        doMove(face);
-      };
-
-      window.scramble = function (n = 20) {
-        const keys = Object.keys(defs);
-        for (let i = 0; i < n; i++) {
-          const k = keys[Math.floor(Math.random() * keys.length)];
-          window.move(k);
-        }
-      };
-
-      window.resetCube = function () {
-        queue.length = 0;
-        busy = false;
-
-        cubelets.forEach((c, i) => {
-          c.dataset.x = initial[i].x;
-          c.dataset.y = initial[i].y;
-          c.dataset.z = initial[i].z;
-          applyWorldPosition(c);
-
-          c.setAttribute("rotation", "0 0 0");
-          c.object3D.rotation.set(0, 0, 0);
-        });
-      };
-
-      // Keyboard controls
-      window.addEventListener("keydown", (e) => {
-        const k = e.key.toUpperCase();
-        if (!["U", "D", "L", "R", "F", "B"].includes(k)) return;
-        const face = e.shiftKey ? k + "prime" : k;
-        window.move(face);
-      });
-
-      console.log("Loaded. cubelets =", cubelets.length); // πρέπει να γράψει 27
-    </script>
-  </body>
-</html>
+ (cd "$(git rev-parse --show-toplevel)" && git apply --3way <<'EOF' 
+diff --git a/index.html b/index.html
+index 9bf95c95ca7d59c39e5f5ee1067627818cb51352..dc747e9458690e6a4d1165dd3de32477d659bad3 100644
+--- a/index.html
++++ b/index.html
+@@ -132,69 +132,97 @@
+       // Animation (μικρό για να φαίνεται η κίνηση)
+       const ANIM_MS = 220;
+ 
+       let busy = false;
+       const queue = [];
+ 
+       const cubelets = [];
+       const initial = [];
+ 
+       function gridToWorld(x, y, z) {
+         return {
+           x: x * SPACING,
+           y: y * SPACING + Y_OFFSET,
+           z: z * SPACING + Z_OFFSET,
+         };
+       }
+ 
+       function applyWorldPosition(c) {
+         const x = +c.dataset.x;
+         const y = +c.dataset.y;
+         const z = +c.dataset.z;
+         const w = gridToWorld(x, y, z);
+         c.setAttribute("position", `${w.x} ${w.y} ${w.z}`);
+       }
+ 
+-      // ===== ΔΗΜΙΟΥΡΓΙΑ 27 CUBELETS (a-box για 100% σταθερότητα) =====
++      const STICKER_COLORS = {
++        U: "#FFFFFF",
++        D: "#FFD600",
++        F: "#2ECC71",
++        B: "#1976D2",
++        L: "#FF9800",
++        R: "#E53935",
++      };
++
++      function addSticker(parent, color, position, rotation) {
++        const sticker = document.createElement("a-plane");
++        sticker.setAttribute("width", "0.47");
++        sticker.setAttribute("height", "0.47");
++        sticker.setAttribute("material", `color: ${color}; roughness: 0.35; metalness: 0.05`);
++        sticker.setAttribute("position", position);
++        sticker.setAttribute("rotation", rotation);
++        parent.appendChild(sticker);
++      }
++
++      // ===== ΔΗΜΙΟΥΡΓΙΑ 27 CUBELETS (a-entity με stickers) =====
+       for (const y of coords) {
+         for (const x of coords) {
+           for (const z of coords) {
+-            const c = document.createElement("a-box");
++            const c = document.createElement("a-entity");
++            const core = document.createElement("a-box");
+ 
+             // εμφάνιση
+-            c.setAttribute("width", "0.55");
+-            c.setAttribute("height", "0.55");
+-            c.setAttribute("depth", "0.55");
+-            c.setAttribute("color", "#1b1b1b");
+-            c.setAttribute("metalness", "0.08");
+-            c.setAttribute("roughness", "0.85");
++            core.setAttribute("width", "0.55");
++            core.setAttribute("height", "0.55");
++            core.setAttribute("depth", "0.55");
++            core.setAttribute("color", "#1b1b1b");
++            core.setAttribute("metalness", "0.08");
++            core.setAttribute("roughness", "0.85");
++            c.appendChild(core);
+ 
+             // λογικές συντεταγμένες
+             c.dataset.x = x;
+             c.dataset.y = y;
+             c.dataset.z = z;
+ 
++            if (y === 1) addSticker(c, STICKER_COLORS.U, "0 0.28 0", "-90 0 0");
++            if (y === -1) addSticker(c, STICKER_COLORS.D, "0 -0.28 0", "90 0 0");
++            if (z === -1) addSticker(c, STICKER_COLORS.F, "0 0 -0.28", "0 0 0");
++            if (z === 1) addSticker(c, STICKER_COLORS.B, "0 0 0.28", "0 180 0");
++            if (x === -1) addSticker(c, STICKER_COLORS.L, "-0.28 0 0", "0 90 0");
++            if (x === 1) addSticker(c, STICKER_COLORS.R, "0.28 0 0", "0 -90 0");
++
+             applyWorldPosition(c);
+ 
+             cluster.appendChild(c);
+             cubelets.push(c);
+             initial.push({ x, y, z });
+           }
+         }
+       }
+ 
+       // ===== (ΠΡΟΑΙΡΕΤΙΚΑ) Διακοσμητικά γύρω από τον κύβο =====
+       const N = 12; // βάλε 0 αν δεν θες τίποτα
+       for (let i = 0; i < N; i++) {
+         const el = document.createElement(i % 2 ? "a-sphere" : "a-box");
+         el.setAttribute("color", i % 2 ? "#4CAF50" : "#FFEB3B");
+         el.setAttribute("scale", "0.35 0.35 0.35");
+ 
+         let px, pz;
+         do {
+           px = (Math.random() - 0.5) * 14;
+           pz = (Math.random() - 0.5) * 14 - 3;
+         } while (Math.abs(px) < 2 && Math.abs(pz + 3) < 2);
+ 
+         const py = 0.3 + Math.random() * 2.2;
+         el.setAttribute("position", `${px} ${py} ${pz}`);
+         deco.appendChild(el);
+@@ -216,50 +244,52 @@
+         Fprime: { axis: "z", layer: -1, dir: -1 },
+         B:      { axis: "z", layer: +1, dir: -1 },
+         Bprime: { axis: "z", layer: +1, dir: +1 },
+       };
+ 
+       function inLayer(c, axis, layer) {
+         if (axis === "x") return +c.dataset.x === layer;
+         if (axis === "y") return +c.dataset.y === layer;
+         return +c.dataset.z === layer;
+       }
+ 
+       // Καθαρό mapping 90° πάνω στο grid
+       function rotateGrid(x, y, z, axis, dir) {
+         if (axis === "y") return { x: -dir * z, y, z: dir * x };
+         if (axis === "x") return { x, y: -dir * z, z: dir * y };
+         return { x: -dir * y, y: dir * x, z };
+       }
+ 
+       function doMove(face) {
+         const def = defs[face];
+         if (!def) return;
+ 
+         const affected = cubelets.filter((c) => inLayer(c, def.axis, def.layer));
+         if (!affected.length) return;
+ 
++        busy = true;
++
+         // pivot στο κέντρο της φέτας (σε world coords)
+         const pivot = document.createElement("a-entity");
+         let cx = 0, cy = 0, cz = 0;
+         if (def.axis === "x") cx = def.layer;
+         if (def.axis === "y") cy = def.layer;
+         if (def.axis === "z") cz = def.layer;
+ 
+         const w = gridToWorld(cx, cy, cz);
+         pivot.setAttribute("position", `${w.x} ${w.y} ${w.z}`);
+         pivot.setAttribute("rotation", "0 0 0");
+         cluster.appendChild(pivot);
+ 
+         // attach στο pivot για να γυρίσουν οπτικά
+         const pivotObj = pivot.object3D;
+         affected.forEach((c) => pivotObj.attach(c.object3D));
+ 
+         const rot = { x: 0, y: 0, z: 0 };
+         rot[def.axis] = 90 * def.dir;
+ 
+         pivot.setAttribute("animation__rot", {
+           property: "rotation",
+           to: `${rot.x} ${rot.y} ${rot.z}`,
+           dur: ANIM_MS,
+           easing: "easeInOutQuad",
+         });
+@@ -278,51 +308,50 @@
+               const z = +c.dataset.z;
+               const r = rotateGrid(x, y, z, def.axis, def.dir);
+               c.dataset.x = r.x;
+               c.dataset.y = r.y;
+               c.dataset.z = r.z;
+             });
+ 
+             // snap πίσω στο grid
+             affected.forEach(applyWorldPosition);
+ 
+             pivot.remove();
+ 
+             busy = false;
+             if (queue.length) doMove(queue.shift());
+           },
+           { once: true }
+         );
+       }
+ 
+       // ===== Public functions για κουμπιά =====
+       window.move = function (face) {
+         if (busy) {
+           queue.push(face);
+           return;
+         }
+-        busy = true;
+         doMove(face);
+       };
+ 
+       window.scramble = function (n = 20) {
+         const keys = Object.keys(defs);
+         for (let i = 0; i < n; i++) {
+           const k = keys[Math.floor(Math.random() * keys.length)];
+           window.move(k);
+         }
+       };
+ 
+       window.resetCube = function () {
+         queue.length = 0;
+         busy = false;
+ 
+         cubelets.forEach((c, i) => {
+           c.dataset.x = initial[i].x;
+           c.dataset.y = initial[i].y;
+           c.dataset.z = initial[i].z;
+           applyWorldPosition(c);
+ 
+           c.setAttribute("rotation", "0 0 0");
+           c.object3D.rotation.set(0, 0, 0);
+         });
+       };
+ 
+EOF
+)
