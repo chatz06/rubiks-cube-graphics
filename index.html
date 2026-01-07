@@ -90,6 +90,11 @@
           src="https://kostasgian21.github.io/computer_graphics/360-degree_Panorama_of_the_Southern_Sky.jpg"
           crossorigin="anonymous"
         />
+        <!--
+        -->
+
+        <a-asset-item id="tinkercad-model" src="tinkercad_model.glb"></a-asset-item>
+
       </a-assets>
 
       <a-sky src="#skyTexture"></a-sky>
@@ -122,6 +127,17 @@
 -->
 
 
+<!-- Tinkercad model  -->
+<a-entity
+  id="tinkercad-object"
+  gltf-model="#tinkercad-model"
+  position="0 1.2 -3"
+  rotation="0 45 0"
+  scale="0.6 0.6 0.6">
+</a-entity>
+
+
+
 
       <a-plane
         rotation="-90 0 0"
@@ -131,7 +147,7 @@
         color="#111"
       ></a-plane>
 
-      <a-entity id="cube-cluster"></a-entity>
+      <a-entity id="cube-cluster" visible="false"></a-entity>
       <a-entity id="decorations"></a-entity>
 
       <a-entity
