@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Rubik - Final</title>
+    <title>Rubik - Grid Based (Stable)</title>
     <script src="https://aframe.io/releases/1.7.0/aframe.min.js"></script>
 
     <style>
@@ -84,11 +84,6 @@
 
     <a-scene stats>
       <a-assets>
-        <a-asset-item
-          id="cube-model"
-          src="https://kostasgian21.github.io/computer_graphics/rubiks_cube_standard_solid_v3.glb"
-        ></a-asset-item>
-
         <img
           id="skyTexture"
           src="https://kostasgian21.github.io/computer_graphics/360-degree_Panorama_of_the_Southern_Sky.jpg"
@@ -98,57 +93,48 @@
 
       <a-sky src="#skyTexture"></a-sky>
 
-      <a-entity light="type: ambient; intensity: 1.2; color: #FFF"></a-entity>
-      <a-entity
-        light="type: directional; intensity: 2.0; color: #FFF"
-        position="2 5 2"
-      ></a-entity>
+      <!-- Φωτισμός -->
+      <a-entity light="type: ambient; intensity: 1.15; color: #FFF"></a-entity>
+      <a-entity light="type: directional; intensity: 1.9; color: #FFF" position="2 5 2"></a-entity>
 
-      <!-- ΑΛΛΑΞΕ ΤΟ ΟΝΟΜΑ -->
+      <!-- ΟΝΟΜΑ: βάλε το δικό σου -->
       <a-entity
-        text="value: ΜΙΧΑΛΗΣ; align: center; width: 8; color: #FF5722"
+        text="value: ΤΟ ΟΝΟΜΑ ΣΑΣ; align: center; width: 8; color: #FF5722"
         position="0 3.6 -5"
       ></a-entity>
 
-      <!-- Μικρότερο πάτωμα (να μην τρώει όλο το κάδρο) -->
-      <a-plane
-        rotation="-90 0 0"
-        position="0 0 -3"
-        width="12"
-        height="12"
-        color="#111"
-      ></a-plane>
+      <!-- Πάτωμα (μικρότερο για να μην «τρώει» όλη τη σκηνή) -->
+      <a-plane rotation="-90 0 0" position="0 0 -3" width="12" height="12" color="#111"></a-plane>
 
-      <!-- Ο κύβος -->
+      <!-- Rubik -->
       <a-entity id="cube-cluster"></a-entity>
 
-      <!-- Διακοσμητικά -->
+      <!-- Προαιρετικά διακοσμητικά (μπορείς να τα σβήσεις) -->
       <a-entity id="decorations"></a-entity>
 
-      <!-- Κάμερα πιο κοντά -->
-      <a-entity
-        camera
-        look-controls
-        wasd-controls="fly: true"
-        position="0 1.7 1.9"
-      ></a-entity>
+      <!-- Κάμερα -->
+      <a-entity camera look-controls wasd-controls="fly: true" position="0 1.7 1.9"></a-entity>
     </a-scene>
 
     <script>
-      // ====== ΡΥΘΜΙΣΕΙΣ ΧΩΡΟΥ ======
+      // ===== ΡΥΘΜΙΣΕΙΣ =====
       const cluster = document.getElementById("cube-cluster");
       const deco = document.getElementById("decorations");
 
-      const SPACING = 0.7;
-      const Y_OFFSET = 1.2; // σηκώνει τον κύβο
+      // Πλέγμα 3x3x3 σε λογικές συντεταγμένες -1,0,1
+      const coords = [-1, 0, 1];
+
+      // Μετατροπή grid->world
+      const SPACING = 0.72;
+      const Y_OFFSET = 1.1; // σήκωσε/κατέβασε τον κύβο από εδώ
       const Z_OFFSET = -3;
 
+      // Animation (μικρό για να φαίνεται η κίνηση)
       const ANIM_MS = 220;
 
       let busy = false;
       const queue = [];
 
-      const coords = [-1, 0, 1];
       const cubelets = [];
       const initial = [];
 
@@ -168,14 +154,21 @@
         c.setAttribute("position", `${w.x} ${w.y} ${w.z}`);
       }
 
-      // ====== 27 CUBELETS ======
+      // ===== ΔΗΜΙΟΥΡΓΙΑ 27 CUBELETS (a-box για 100% σταθερότητα) =====
       for (const y of coords) {
         for (const x of coords) {
           for (const z of coords) {
-            const c = document.createElement("a-entity");
-            c.setAttribute("gltf-model", "#cube-model");
-            c.setAttribute("scale", "0.7 0.7 0.7");
+            const c = document.createElement("a-box");
 
+            // εμφάνιση
+            c.setAttribute("width", "0.55");
+            c.setAttribute("height", "0.55");
+            c.setAttribute("depth", "0.55");
+            c.setAttribute("color", "#1b1b1b");
+            c.setAttribute("metalness", "0.08");
+            c.setAttribute("roughness", "0.85");
+
+            // λογικές συντεταγμένες
             c.dataset.x = x;
             c.dataset.y = y;
             c.dataset.z = z;
@@ -189,14 +182,13 @@
         }
       }
 
-      // ====== ΔΙΑΚΟΣΜΗΤΙΚΑ (τα βάζουμε σίγουρα) ======
-      const N = 14;
+      // ===== (ΠΡΟΑΙΡΕΤΙΚΑ) Διακοσμητικά γύρω από τον κύβο =====
+      const N = 12; // βάλε 0 αν δεν θες τίποτα
       for (let i = 0; i < N; i++) {
         const el = document.createElement(i % 2 ? "a-sphere" : "a-box");
         el.setAttribute("color", i % 2 ? "#4CAF50" : "#FFEB3B");
         el.setAttribute("scale", "0.35 0.35 0.35");
 
-        // Τυχαία θέση γύρω από τον κύβο, αλλά όχι πάνω του
         let px, pz;
         do {
           px = (Math.random() - 0.5) * 14;
@@ -208,7 +200,7 @@
         deco.appendChild(el);
       }
 
-      // ====== MOVES (grid-based) ======
+      // ===== ΟΡΙΣΜΟΣ ΚΙΝΗΣΕΩΝ (grid-based, χωρίς drift) =====
       const defs = {
         U:      { axis: "y", layer: +1, dir: +1 },
         Uprime: { axis: "y", layer: +1, dir: -1 },
@@ -232,6 +224,7 @@
         return +c.dataset.z === layer;
       }
 
+      // Καθαρό mapping 90° πάνω στο grid
       function rotateGrid(x, y, z, axis, dir) {
         if (axis === "y") return { x: -dir * z, y, z: dir * x };
         if (axis === "x") return { x, y: -dir * z, z: dir * y };
@@ -245,17 +238,19 @@
         const affected = cubelets.filter((c) => inLayer(c, def.axis, def.layer));
         if (!affected.length) return;
 
-        // pivot στο κέντρο του slice
+        // pivot στο κέντρο της φέτας (σε world coords)
         const pivot = document.createElement("a-entity");
         let cx = 0, cy = 0, cz = 0;
         if (def.axis === "x") cx = def.layer;
         if (def.axis === "y") cy = def.layer;
         if (def.axis === "z") cz = def.layer;
+
         const w = gridToWorld(cx, cy, cz);
         pivot.setAttribute("position", `${w.x} ${w.y} ${w.z}`);
         pivot.setAttribute("rotation", "0 0 0");
         cluster.appendChild(pivot);
 
+        // attach στο pivot για να γυρίσουν οπτικά
         const pivotObj = pivot.object3D;
         affected.forEach((c) => pivotObj.attach(c.object3D));
 
@@ -272,11 +267,11 @@
         pivot.addEventListener(
           "animationcomplete__rot",
           () => {
-            // detach πίσω
+            // detach πίσω στο cluster
             const clObj = cluster.object3D;
             affected.forEach((c) => clObj.attach(c.object3D));
 
-            // update ΜΟΝΟ με grid maths
+            // ✅ ενημέρωση ΜΟΝΟ με grid math (όχι object3D.position)
             affected.forEach((c) => {
               const x = +c.dataset.x;
               const y = +c.dataset.y;
@@ -287,7 +282,9 @@
               c.dataset.z = r.z;
             });
 
+            // snap πίσω στο grid
             affected.forEach(applyWorldPosition);
+
             pivot.remove();
 
             busy = false;
@@ -297,7 +294,7 @@
         );
       }
 
-      // Public
+      // ===== Public functions για κουμπιά =====
       window.move = function (face) {
         if (busy) {
           queue.push(face);
@@ -318,23 +315,27 @@
       window.resetCube = function () {
         queue.length = 0;
         busy = false;
+
         cubelets.forEach((c, i) => {
           c.dataset.x = initial[i].x;
           c.dataset.y = initial[i].y;
           c.dataset.z = initial[i].z;
           applyWorldPosition(c);
+
           c.setAttribute("rotation", "0 0 0");
           c.object3D.rotation.set(0, 0, 0);
         });
       };
 
+      // Keyboard controls
       window.addEventListener("keydown", (e) => {
         const k = e.key.toUpperCase();
         if (!["U", "D", "L", "R", "F", "B"].includes(k)) return;
         const face = e.shiftKey ? k + "prime" : k;
         window.move(face);
       });
+
+      console.log("Loaded. cubelets =", cubelets.length); // πρέπει να γράψει 27
     </script>
   </body>
 </html>
-
